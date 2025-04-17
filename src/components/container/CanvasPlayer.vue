@@ -2,19 +2,27 @@
     <div class="container">
         <!-- 左侧：视频播放器和轨道 -->
         <div class="left-panel">
-            <div class="video-container" :style="{ aspectRatio: videoAspectRatio }">
-                <div v-if="!video" class="video-upload-placeholder">
-                    <input @change="changFile" type="file" id="uploader" accept="video/*" class="hidden-uploader">
-                    <label for="uploader" class="upload-label">
-                        <span class="upload-icon">+</span>
-                        <span>选择视频文件</span>
-                    </label>
+            <div class="video-container-wrapper" :style="{ backgroundColor: '#000' }">
+                <!-- 背景层 -->
+                <div v-if="isBackgroundApplied" class="background-layer">
+                    <img :src="backgroundPreview" alt="背景" class="background-image">
                 </div>
 
-                <video v-else id="screen-video" ref="screenVideo" controls @loadedmetadata="handleVideoLoaded"
-                    @error="handleVideoError"></video>
+                <!-- 原始视频容器 -->
+                <div class="video-container" :style="{ aspectRatio: videoAspectRatio }">
+                    <div v-if="!video" class="video-upload-placeholder">
+                        <input @change="changFile" type="file" id="uploader" accept="video/*" class="hidden-uploader">
+                        <label for="uploader" class="upload-label">
+                            <span class="upload-icon">+</span>
+                            <span>选择视频文件</span>
+                        </label>
+                    </div>
 
-                <div id="preview-elements" ref="previewElements"></div>
+                    <video v-else id="screen-video" ref="screenVideo" controls @loadedmetadata="handleVideoLoaded"
+                        @error="handleVideoError"></video>
+
+                    <div id="preview-elements" ref="previewElements"></div>
+                </div>
             </div>
 
             <div class="track-container">
@@ -79,8 +87,8 @@
 
                                     <div class="control-group">
                                         <label>Y位置:</label>
-                                        <input type="range" v-model="field.style.yPosition" min="0" :max="videoHeight"
-                                            step="1">
+                                        <input type="range" v-model="field.style.yPosition" min="0"
+                                            :max="isBackgroundApplied ? backgroundHeight : videoHeight" step="1">
                                         <span>{{ field.style.yPosition }}px</span>
                                     </div>
 
@@ -110,13 +118,18 @@
                                         <option value="custom">自定义尺寸</option>
                                     </select>
                                     <div v-if="videoSizeOption === 'custom'" class="custom-size">
-                                        <input type="number" v-model="customWidth" placeholder="宽度">
+                                        <input type="number" v-model="customWidth" placeholder="宽度"
+                                            @input="updateCustomSize">
                                         <span>x</span>
-                                        <input type="number" v-model="customHeight" placeholder="高度">
+                                        <input type="number" v-model="customHeight" placeholder="高度"
+                                            @input="updateCustomSize">
                                     </div>
                                 </div>
                                 <div class="apply-controls">
-                                    <button @click.stop="previewBackground" class="preview-btn">预览效果</button>
+                                    <button @click.stop="previewBackground" class="preview-btn"
+                                        :disabled="!backgroundPreview">
+                                        预览效果
+                                    </button>
                                     <button @click.stop="removeBackgroundElement" class="cancel-btn"
                                         :disabled="!isBackgroundApplied">
                                         取消应用
@@ -129,32 +142,50 @@
                         <div class="upload-preview-group">
                             <div class="file-upload">
                                 <input @change="changImage" type="file" id="uploaderImage" accept="image/*">
-                                <label for="uploaderImage">选择图片水印文件</label>
+                                <label for="uploaderImage">添加图片水印</label>
                             </div>
 
-                            <div v-if="watermarkPreview" class="watermark-options">
+                            <!-- 水印列表 -->
+                            <div v-for="(watermark, index) in watermarkPreviews" :key="watermark.id" class="watermark-item">
+                                <div class="watermark-thumbnail"
+                                    @click="activeWatermarkIndex = index; showWatermarkEdit = true">
+                                    <img :src="watermark.preview" alt="水印预览">
+                                    <span class="watermark-index">水印 {{ index + 1 }}</span>
+                                </div>
+                                <button @click.stop="removeWatermarkElement(index)" class="remove-watermark-btn">
+                                    移除
+                                </button>
+                            </div>
+
+                            <!-- 水印编辑面板 -->
+                            <div v-if="showWatermarkEdit && activeWatermarkIndex >= 0" class="watermark-options">
                                 <div class="watermark-controls-row">
                                     <div class="watermark-control">
                                         <label>X位置</label>
-                                        <input type="range" v-model="watermarkX" min="0" :max="videoWidth"
-                                            @input="updateWatermarkElement">
-                                        <span>{{ watermarkX }}px</span>
+                                        <input type="range" v-model="watermarkPreviews[activeWatermarkIndex].x" min="0"
+                                            :max="videoWidth" @input="updateWatermarkElement(activeWatermarkIndex)">
+                                        <span>{{ watermarkPreviews[activeWatermarkIndex].x }}px</span>
                                     </div>
                                     <div class="watermark-control">
                                         <label>Y位置</label>
-                                        <input type="range" v-model="watermarkY" min="0" :max="videoHeight"
-                                            @input="updateWatermarkElement">
-                                        <span>{{ watermarkY }}px</span>
+                                        <input type="range" v-model="watermarkPreviews[activeWatermarkIndex].y" min="0"
+                                            :max="backgroundHeight" @input="updateWatermarkElement(activeWatermarkIndex)">
+                                        <span>{{ watermarkPreviews[activeWatermarkIndex].y }}px</span>
                                     </div>
                                     <div class="watermark-control">
                                         <label>大小</label>
-                                        <input type="range" v-model="watermarkSize" min="10" max="200"
-                                            @input="updateWatermarkElement">
-                                        <span>{{ watermarkSize }}%</span>
+                                        <input type="range" v-model="watermarkPreviews[activeWatermarkIndex].size" min="10"
+                                            max="200" @input="updateWatermarkElement(activeWatermarkIndex)">
+                                        <span>{{ watermarkPreviews[activeWatermarkIndex].size }}%</span>
                                     </div>
-                                    <button @click.stop="removeWatermarkElement" class="cancel-btn1"
-                                        :disabled="!isWatermarkApplied">
-                                        取消应用
+                                    <div class="watermark-control">
+                                        <label>透明度</label>
+                                        <input type="range" v-model="watermarkPreviews[activeWatermarkIndex].opacity"
+                                            min="0" max="100" @input="updateWatermarkElement(activeWatermarkIndex)">
+                                        <span>{{ watermarkPreviews[activeWatermarkIndex].opacity }}%</span>
+                                    </div>
+                                    <button @click.stop="showWatermarkEdit = false" class="cancel-btn1">
+                                        完成编辑
                                     </button>
                                 </div>
                             </div>
@@ -166,14 +197,20 @@
                                 <label for="uploaderCaptions">选择字幕文件</label>
                             </div>
                             <el-switch v-model="autoGenerateSubtitles" active-text="一键生成字幕" inactive-text="关闭生成"
-                                class="subtitle-switch" @change="handleSubtitleToggle">
+                                class="subtitle-switch" @change="handleSubtitleToggle" :disabled="isGeneratingSubtitles"
+                                :loading="isGeneratingSubtitles">
                             </el-switch>
+                            <el-button v-if="subtitleSrtUrl" type="primary" size="small" @click="exportSubtitle"
+                                :disabled="isGeneratingSubtitles">
+                                导出字幕(.srt)
+                            </el-button>
                         </div>
 
                         <div class="save-template">
                             <button @click="saveTemplate" class="save-btn">保存编辑模板</button>
                         </div>
                         <div class="render-export-row">
+                            <button @click="resetAllPreviews" class="reset-btn">重置所有编辑</button>
                             <button @click="renderVideo" class="render-btn">渲染视频</button>
                             <button @click="exportVideo" class="export-btn">导出视频</button>
                         </div>
@@ -213,9 +250,10 @@
 <script setup>
 import { clearEmpty } from '@/utils/string.js';
 import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
-import { onMounted, reactive, ref, nextTick } from 'vue';
+import { reactive, ref, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
-
+import { onMounted, onUnmounted, computed } from 'vue';
+import axios from 'axios';
 // 配置
 const frameDir = 'frame';
 
@@ -243,6 +281,65 @@ const video = ref(null);
 const watermark = ref(null);
 const captions = ref(null);
 const videoAspectRatio = ref('16/9');
+//字幕生成
+const api = axios.create({
+    baseURL: 'http://localhost:5000', // Flask默认端口
+});
+const subtitleText = ref('');
+const subtitleSrtUrl = ref('');
+const isGeneratingSubtitles = ref(false);
+const handleSubtitleToggle = async (value) => {
+    if (value) {
+        try {
+            isGeneratingSubtitles.value = true;
+            ElMessage.info('正在生成字幕...');
+
+            if (!video.value) {
+                throw new Error('请先上传视频文件');
+            }
+
+            const formData = new FormData();
+            formData.append('file', video.value);
+
+            // 使用axios发送请求
+            const response = await api.post('/upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            subtitleText.value = response.data.text;
+            subtitleSrtUrl.value = response.data.srt_url;
+
+            ElMessage.success('字幕生成成功');
+        } catch (error) {
+            console.error('生成字幕失败:', error);
+            ElMessage.error(`生成字幕失败: ${error.response?.data?.error || error.message}`);
+            autoGenerateSubtitles.value = false;
+        } finally {
+            isGeneratingSubtitles.value = false;
+        }
+    } else {
+        subtitleText.value = '';
+        subtitleSrtUrl.value = '';
+    }
+};
+
+// 导出字幕函数同样使用axios
+const exportSubtitle = async () => {
+    if (!subtitleSrtUrl.value) {
+        ElMessage.warning('没有可导出的字幕文件');
+        return;
+    }
+
+    try {
+        // 直接从后端下载文件
+        window.open(`http://localhost:5000${subtitleSrtUrl.value}`, '_blank');
+    } catch (error) {
+        console.error('导出字幕失败:', error);
+        ElMessage.error('导出字幕失败');
+    }
+};
 // 新增的可编辑字段数据
 const editableFields = ref([
     {
@@ -307,13 +404,15 @@ const customWidth = ref(1080);
 const customHeight = ref(1920);
 
 // 水印相关
-const watermarkPreview = ref(null);
+const watermarkPreviews = ref([]);
+const activeWatermarkIndex = ref(-1); // 当前激活的水印索引
 const watermarkX = ref(10);
 const watermarkY = ref(10);
 const watermarkSize = ref(100);
 const watermarkOpacity = ref(100);
 const watermarkElementId = ref(null); //跟踪水印元素ID
 const isWatermarkApplied = ref(false);
+const showWatermarkEdit = ref(false);
 
 ffmpeg.setLogger(({ type, message }) => {
     if (type === 'fferr') {
@@ -464,6 +563,22 @@ const handleFrame = async () => {
         throw new Error('生成序列帧时出错');
     }
 };
+const updateCustomSize = () => {
+    if (isBackgroundApplied.value) {
+        const backgroundImage = document.querySelector('.background-image');
+        if (backgroundImage) {
+            const container = document.querySelector('.video-container-wrapper');
+            const containerHeight = container.clientHeight;
+            const aspectRatio = customWidth.value / customHeight.value;
+
+            backgroundImage.style.width = `${containerHeight * aspectRatio}px`;
+            backgroundImage.style.height = `${containerHeight}px`;
+
+            // 重新调整视频大小
+            adjustVideoSize();
+        }
+    }
+};
 const handleBackground = async (event) => {
     const backgroundFile = event.target.files[0];
     if (!backgroundFile) return;
@@ -473,6 +588,8 @@ const handleBackground = async (event) => {
         URL.revokeObjectURL(backgroundPreview.value);
     }
 
+    // 重置文件输入，允许重复上传同一文件
+    event.target.value = '';
     // 创建预览
     backgroundPreview.value = URL.createObjectURL(backgroundFile);
     isBackgroundApplied.value = false; // 重置应用状态
@@ -496,158 +613,371 @@ const previewBackground = async (event) => {
         ElMessage.warning('请先选择背景图片');
         return;
     }
-
     try {
-        // 移除旧的背景元素
-        removeBackgroundElement();
+        // 获取图片原始尺寸
+        const img = new Image();
+        await new Promise((resolve) => {
+            img.onload = resolve;
+            img.src = backgroundPreview.value;
+        });
 
-        // 创建新的背景元素
-        const bgElement = document.createElement('div');
-        bgElement.id = 'background-' + Date.now();
-        backgroundElementId.value = bgElement.id;
+        // 更新背景尺寸
+        if (videoSizeOption.value === 'match') {
+            customWidth.value = img.width;
+            customHeight.value = img.height;
+            //videoAspectRatio.value = `${img.width}/${img.height}`;
+        }
 
-        bgElement.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: url(${backgroundPreview.value});
-            background-size: cover;
-            background-position: center;
-            z-index: -1;
-        `;
+        const backgroundLayer = document.querySelector('.background-layer');
+        const backgroundImage = document.querySelector('.background-image');
 
-        // 添加到视频容器
-        document.querySelector('.video-container').appendChild(bgElement);
+        if (backgroundLayer && backgroundImage) {
+            const container = document.querySelector('.video-container-wrapper');
+            const containerHeight = container.clientHeight;
+            const aspectRatio = customWidth.value / customHeight.value;
+
+            backgroundImage.style.width = `${containerHeight * aspectRatio}px`;
+            backgroundImage.style.height = `${containerHeight}px`;
+            backgroundImage.style.objectFit = 'cover';
+
+            // 更新视频高度为背景高度
+            videoHeight.value = containerHeight;
+        }
+
         isBackgroundApplied.value = true;
-
         ElMessage.success('背景预览已更新');
+
+        // 调整视频大小
+        adjustVideoSize();
+        // 重置所有字段的Y位置
+        editableFields.value.forEach(field => {
+            field.style.yPosition = Math.min(field.style.yPosition, videoHeight.value);
+        });
+        // try {
+        //     // 移除旧的背景元素
+        //     removeBackgroundElement();
+
+        //     // 创建新的背景元素
+        //     const bgElement = document.createElement('div');
+        //     bgElement.id = 'background-' + Date.now();
+        //     backgroundElementId.value = bgElement.id;
+
+        //     bgElement.style.cssText = `
+        //         position: absolute;
+        //         top: 0;
+        //         left: 0;
+        //         width: 100%;
+        //         height: 100%;
+        //         background-image: url(${backgroundPreview.value});
+        //         background-size: cover;
+        //         background-position: center;
+        //         z-index: 0;
+        //     `;
+
+        //     // 添加到视频容器
+        //     const videoContainer = document.querySelector('.video-container');
+        //     if (videoContainer) {
+        //         // 确保视频元素在最上层
+        //         const videoElement = videoContainer.querySelector('video');
+        //         if (videoElement) {
+        //             videoElement.style.position = 'relative';
+        //             videoElement.style.zIndex = '1';
+        //         }
+
+        //         videoContainer.appendChild(bgElement);
+        //         isBackgroundApplied.value = true;
+        //         ElMessage.success('背景预览已更新');
+        //     }
     } catch (error) {
         console.error('背景预览失败:', error);
         ElMessage.error('背景预览失败');
     }
 };
+const adjustVideoSize = () => {
+    nextTick(() => {
+        if (isBackgroundApplied.value && screenVideo.value) {
+            const backgroundImg = document.querySelector('.background-image');
+            if (backgroundImg) {
+                const container = document.querySelector('.video-container');
+                const videoElement = screenVideo.value;
 
-const removeBackgroundElement = () => {
-    if (backgroundElementId.value) {
-        const element = document.getElementById(backgroundElementId.value);
-        if (element) {
-            element.remove();
+                // 更新视频尺寸
+                videoElement.style.width = `${backgroundImg.clientWidth}px`;
+                videoElement.style.height = 'auto';
+
+                // 更新容器尺寸
+                container.style.width = 'auto';
+                container.style.height = 'auto';
+
+                // 更新存储的尺寸值
+                videoWidth.value = backgroundImg.clientWidth;
+                videoHeight.value = backgroundImg.clientHeight;
+
+                // 重新定位所有元素
+                editableFields.value.forEach(field => {
+                    if (field.previewElementId) {
+                        applyStyleToVideo(field);
+                    }
+                });
+
+                // 重新定位所有水印
+                watermarkPreviews.value.forEach((_, index) => {
+                    updateWatermarkElement(index);
+                });
+            }
         }
-        backgroundElementId.value = null;
-        isBackgroundApplied.value = false;
+    });
+};
+const removeBackgroundElement = () => {
+    if (backgroundPreview.value) {
+        URL.revokeObjectURL(backgroundPreview.value);
+        backgroundPreview.value = null;
     }
+
+    // 重置背景应用状态
+    isBackgroundApplied.value = false;
+
+    // 重置视频尺寸
+    if (video.value && screenVideo.value) {
+        videoWidth.value = screenVideo.value.videoWidth;
+        videoHeight.value = screenVideo.value.videoHeight;
+        videoAspectRatio.value = `${videoWidth.value}/${videoHeight.value}`;
+    }
+
+    ElMessage.success('背景已移除');
 };
 // 新增变量
 const originalWatermarkWidth = ref(0);
 const originalWatermarkHeight = ref(0);
+// 添加比例计算函数
+const getActualVideoDimensions = () => {
+    // 1. 用户明确选择自定义尺寸
+    if (videoSizeOption.value === 'custom') {
+        return {
+            width: parseInt(customWidth.value),
+            height: parseInt(customHeight.value)
+        };
+    }
 
+    // 2. 用户选择匹配背景尺寸且有背景
+    if (videoSizeOption.value === 'match' && isBackgroundApplied.value) {
+        const bgImg = document.querySelector('.background-image');
+        if (bgImg) {
+            return {
+                width: bgImg.naturalWidth || bgImg.width,
+                height: bgImg.naturalHeight || bgImg.height
+            };
+        }
+    }
+
+    // 3. 默认使用视频原始尺寸
+    if (screenVideo.value) {
+        return {
+            width: screenVideo.value.videoWidth,
+            height: screenVideo.value.videoHeight
+        };
+    }
+
+    // 4. 回退值
+    return {
+        width: 1280,
+        height: 720
+    };
+};
+const calculateScaleRatio = () => {
+    const container = document.querySelector('.video-container');
+    if (!container) return { x: 1, y: 1 };
+
+    const actualDimensions = getActualVideoDimensions();
+    const displayDimensions = getDisplayVideoDimensions(); // 获取当前显示尺寸
+
+    return {
+        x: actualDimensions.width / displayDimensions.width,
+        y: actualDimensions.height / displayDimensions.height
+    };
+};
+
+// 获取当前视频显示尺寸（网页中实际显示的像素尺寸）
+const getDisplayVideoDimensions = () => {
+    const container = document.querySelector('.video-container');
+    if (!container) return { width: 0, height: 0 };
+
+    // 如果有背景图片且已应用，使用背景图片的显示尺寸
+    if (isBackgroundApplied.value) {
+        const bgImg = document.querySelector('.background-image');
+        if (bgImg) {
+            return {
+                width: bgImg.clientWidth,
+                height: bgImg.clientHeight
+            };
+        }
+    }
+
+    // 否则使用视频容器的尺寸
+    return {
+        width: container.clientWidth,
+        height: container.clientHeight
+    };
+};
 const changImage = async (file) => {
     const watermarkFile = file.target.files[0];
     if (!watermarkFile) return;
 
-    // 清理之前的URL对象
-    if (watermarkPreview.value) {
-        URL.revokeObjectURL(watermarkPreview.value);
-    }
-
-    watermark.value = watermarkFile;
-    watermarkPreview.value = URL.createObjectURL(watermarkFile);
+    // 创建新水印项
+    const newWatermark = {
+        id: Date.now(),
+        file: watermarkFile,
+        preview: URL.createObjectURL(watermarkFile),
+        x: 10,
+        y: 10,
+        size: 100,
+        opacity: 100,
+        elementId: null,
+        originalWidth: 0,
+        originalHeight: 0
+    };
 
     // 获取图片原始尺寸
     const img = new Image();
-    img.onload = () => {
-        originalWatermarkWidth.value = img.width;
-        originalWatermarkHeight.value = img.height;
-        updateWatermarkElement(); // 初始化水印元素
-    };
-    img.src = watermarkPreview.value;
+    await new Promise((resolve) => {
+        img.onload = () => {
+            newWatermark.originalWidth = img.width;
+            newWatermark.originalHeight = img.height;
+            resolve();
+        };
+        img.src = newWatermark.preview;
+    });
 
-    await ffmpeg.FS('writeFile', 'watermark.png', await fetchFile(watermark.value));
+    watermarkPreviews.value.push(newWatermark);
+    activeWatermarkIndex.value = watermarkPreviews.value.length - 1;
+    showWatermarkEdit.value = true;
+
+    await ffmpeg.FS('writeFile', `watermark-${newWatermark.id}.png`, await fetchFile(watermarkFile));
 };
 
-const updateWatermarkElement = () => {
-    if (!watermarkPreview.value) return;
+const updateWatermarkElement = (index) => {
+    if (index < 0 || index >= watermarkPreviews.value.length) return;
 
-    let watermarkElement = watermarkElementId.value
-        ? document.getElementById(watermarkElementId.value)
-        : null;
+    const watermark = watermarkPreviews.value[index];
+    const container = document.querySelector('.video-container');
+    if (!container) return;
 
+    const elementId = `watermark-${watermark.id}`;
+
+    let watermarkElement = document.getElementById(elementId);
     if (!watermarkElement) {
-        // 创建新水印元素
         watermarkElement = document.createElement('img');
-        watermarkElement.id = 'watermark-' + Date.now();
-        watermarkElementId.value = watermarkElement.id;
-        document.querySelector('.video-container').appendChild(watermarkElement);
+        watermarkElement.id = elementId;
+        watermarkElement.src = watermark.preview;
+        container.appendChild(watermarkElement);
+
+        // 更新watermark对象的elementId引用
+        watermark.elementId = elementId;
+
+        watermarkElement.onerror = () => {
+            console.error('水印图片加载失败:', watermark.preview);
+            watermarkElement.style.backgroundColor = 'rgba(255,0,0,0.3)';
+        };
+    } else {
+        watermarkElement.src = watermark.preview;
     }
 
-    // 计算实际大小（基于原始尺寸的百分比）
-    const actualWidth = (originalWatermarkWidth.value * watermarkSize.value) / 100;
-    const actualHeight = (originalWatermarkHeight.value * watermarkSize.value) / 100;
+    // 获取比例和偏移量
+    const ratio = calculateScaleRatio();
+    const displayDimensions = getDisplayVideoDimensions();
+    let offsetX = 0;
+    let offsetY = 0;
+    // 计算基准Y位置
+    //let baseY = 0;
+    if (isBackgroundApplied.value) {
+        const bgImg = document.querySelector('.background-image');
+        if (bgImg) {
+            offsetX = (container.clientWidth - bgImg.clientWidth) / 2;
+            offsetY = (container.clientHeight - bgImg.clientHeight) / 2;
+        }
+    }
 
-    // 更新水印属性
-    watermarkElement.src = watermarkPreview.value;
-    watermarkElement.className = 'watermark-preview';
-    watermarkElement.style.position = 'absolute';
-    watermarkElement.style.left = `${watermarkX.value}px`;
-    watermarkElement.style.top = `${watermarkY.value}px`;
-    watermarkElement.style.width = `${actualWidth}px`; // 使用实际像素值
-    watermarkElement.style.height = `${actualHeight}px`; // 使用实际像素值
-    watermarkElement.style.opacity = `${watermarkOpacity.value / 100}`;
-    watermarkElement.style.pointerEvents = 'none';
-    watermarkElement.style.objectFit = 'contain';
-    watermarkElement.style.transformOrigin = '0 0';
+    // 确保Y位置不超过最大值
+    // const maxY = isBackgroundApplied.value ? backgroundHeight.value : videoHeight.value;
+    // watermark.y = Math.min(watermark.y, maxY);
 
-    isWatermarkApplied.value = true;
+    // 计算实际大小
+    // const actualWidth = (watermark.originalWidth * watermark.size) / 100;
+    // const actualHeight = (watermark.originalHeight * watermark.size) / 100;
+    // 计算显示位置和大小
+    const displayX = (watermark.x / ratio.x) + offsetX;
+    const displayY = (watermark.y / ratio.y) + offsetY;
+    const displayWidth = (watermark.originalWidth * (watermark.size / 100)) / ratio.x;
+    const displayHeight = (watermark.originalHeight * (watermark.size / 100)) / ratio.y;
+    // 更新元素样式
+    Object.assign(watermarkElement.style, {
+        position: 'absolute',
+        left: `${displayX}px`,
+        top: `${displayY}px`,
+        width: `${displayWidth}px`,
+        height: `${displayHeight}px`,
+        opacity: `${watermark.opacity / 100}`,
+        pointerEvents: 'none',
+        objectFit: 'contain',
+        maxWidth: `${videoWidth.value}px`,
+        maxHeight: `${videoHeight.value}px`,
+        zIndex: '15', // 介于视频和文本之间
+        display: 'block'
+    });
+
+    // console.log('水印位置更新:', {
+    //     index,
+    //     x: watermark.x,
+    //     y: watermark.y,
+    //     baseY,
+    //     finalY: baseY + watermark.y
+    // });
 };
 
-const removeWatermarkElement = () => {
-    if (watermarkElementId.value) {
-        const element = document.getElementById(watermarkElementId.value);
-        if (element) {
-            element.remove();
+const removeWatermarkElement = (index) => {
+    if (index >= 0 && index < watermarkPreviews.value.length) {
+        const watermark = watermarkPreviews.value[index];
+
+        // 移除DOM元素（现在使用统一ID查找）
+        if (watermark.elementId) {
+            const element = document.getElementById(watermark.elementId);
+            if (element) {
+                element.remove();
+            }
         }
-        watermarkElementId.value = null;
-        isWatermarkApplied.value = false;
+
+        // 从数组中移除
+        watermarkPreviews.value.splice(index, 1);
+
+        // 清理URL对象
+        if (watermark.preview) {
+            URL.revokeObjectURL(watermark.preview);
+        }
+
+        // 调整激活索引
+        if (activeWatermarkIndex.value === index) {
+            activeWatermarkIndex.value = -1;
+            showWatermarkEdit.value = false;
+        } else if (activeWatermarkIndex.value > index) {
+            activeWatermarkIndex.value--;
+        }
+
+        ElMessage.success('水印已移除');
     }
 };
 const previewWatermark = (event) => {
-    event.stopPropagation();
-    if (!watermarkPreview.value) {
-        ElMessage.warning('请先选择水印图片');
+    if (watermarkPreviews.value.length === 0) {
+        ElMessage.warning('请先添加水印图片');
         return;
     }
 
-    updateWatermarkElement();
+    // 更新当前激活的水印
+    if (activeWatermarkIndex.value >= 0) {
+        updateWatermarkElement(activeWatermarkIndex.value);
+    }
+
     ElMessage.success('水印预览已更新');
 };
-
-const createWatermarkElement = () => {
-    // 移除旧的水印
-    const oldWatermark = document.querySelector('.watermark-preview');
-    if (oldWatermark) oldWatermark.remove();
-
-    if (!watermarkPreview.value) return;
-
-    const watermarkElement = document.createElement('img');
-    watermarkElement.className = 'watermark-preview';
-    watermarkElement.src = watermarkPreview.value;
-    watermarkElement.style.cssText = `
-        position: absolute;
-        left: ${watermarkX.value}px;
-        top: ${watermarkY.value}px;
-        width: ${watermarkSize.value}%;
-        opacity: ${watermarkOpacity.value / 100};
-        pointer-events: none;
-        max-width: 30%;
-        max-height: 30%;
-        object-fit: contain;
-    `;
-
-    document.querySelector('.video-container').appendChild(watermarkElement);
-};
-
 
 const isPreviewLoading = ref(false);
 
@@ -747,17 +1077,28 @@ const toggleEditPanel = (index) => {
     // 再切换面板状态
     editableFields.value[index].showEditPanel = !editableFields.value[index].showEditPanel;
 };
-
+const backgroundHeight = computed(() => {
+    if (isBackgroundApplied.value) {
+        const bgImg = document.querySelector('.background-image');
+        return bgImg ? bgImg.clientHeight : videoHeight.value;
+    }
+    return videoHeight.value;
+});
 const applyStyleToVideo = (field) => {
-    // 先同步状态
     syncPreviewElements();
-
-    // 移除之前的预览元素（如果存在）
-    if (field.previewElementId) {
-        removePreviewElement(field.previewElementId);
+    const container = document.querySelector('.video-container');
+    if (!container) {
+        console.error('视频容器未找到!');
+        return;
     }
 
-    // 创建新的预览元素
+    // 移除旧元素
+    const existingElement = field.previewElementId ? document.getElementById(field.previewElementId) : null;
+    if (existingElement) {
+        existingElement.remove();
+    }
+
+    // 创建新元素
     const elementId = `preview-${field.id}-${Date.now()}`;
     field.previewElementId = elementId;
 
@@ -766,27 +1107,68 @@ const applyStyleToVideo = (field) => {
     previewElement.className = `preview-element font-${field.style.fontFamily.toLowerCase().replace(/\s+/g, '-')}`;
     previewElement.textContent = field.value;
 
-    // 应用样式
+    // // 计算基准Y位置
+    // let baseY = 0;
+    // if (isBackgroundApplied.value) {
+    //     const bgImg = document.querySelector('.background-image');
+    //     if (bgImg) {
+    //         // 计算背景图片顶部偏移量
+    //         baseY = (container.clientHeight - bgImg.clientHeight) / 2;
+    //     }
+    // }
+
+    // // 确保Y位置不超过最大值
+    // const maxY = isBackgroundApplied.value ? backgroundHeight.value : videoHeight.value;
+    // field.style.yPosition = Math.min(field.style.yPosition, maxY);
+
+    // 获取比例和实际尺寸
+    const ratio = calculateScaleRatio();
+    const actualDimensions = getActualVideoDimensions();
+    const displayDimensions = getDisplayVideoDimensions();
+
+    // 计算显示位置（考虑可能的居中偏移）
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (isBackgroundApplied.value) {
+        const bgImg = document.querySelector('.background-image');
+        if (bgImg) {
+            offsetX = (container.clientWidth - bgImg.clientWidth) / 2;
+            offsetY = (container.clientHeight - bgImg.clientHeight) / 2;
+        }
+    }
+
+    // 应用缩放后的位置
+    const displayX = (field.style.xPosition / ratio.x) + offsetX;
+    const displayY = (field.style.yPosition / ratio.y) + offsetY;
+
     Object.assign(previewElement.style, {
         position: 'absolute',
-        left: `${field.style.xPosition}px`,
-        top: `${field.style.yPosition}px`,
-        fontSize: `${field.style.fontSize}px`,
+        left: `${displayX}px`,
+        top: `${displayY}px`,
+        fontSize: `${field.style.fontSize / ratio.y}px`,
+        fontFamily: field.style.fontFamily,
         color: field.style.fontColor,
         backgroundColor: field.style.backgroundColor,
         padding: '5px 10px',
         borderRadius: '4px',
-        maxWidth: '80%',
+        maxWidth: `${actualDimensions.width * 0.8 / ratio.x}px`,
         wordBreak: 'break-word',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        zIndex: '20', // 提高z-index确保在视频和背景之上
+        display: 'block'
     });
 
-    // 添加到预览容器
-    previewElements.value.appendChild(previewElement);
-
-    ElMessage.success(`已应用 ${field.label} 的样式到预览`);
+    // 确保添加到正确的容器
+    container.appendChild(previewElement);
+    // console.log('元素位置:', {
+    //     x: field.style.xPosition,
+    //     y: field.style.yPosition,
+    //     baseY,
+    //     finalY: baseY + field.style.yPosition,
+    //     containerHeight: container.clientHeight
+    // });
 };
-
 const removePreviewElement = (elementId) => {
     try {
         if (!elementId) {
@@ -851,8 +1233,13 @@ const saveTemplate = () => {
 };
 
 const isFFmpegLoaded = ref(false);
-
+const observer = new ResizeObserver(() => {
+    if (isBackgroundApplied.value) {
+        adjustVideoSize();
+    }
+});
 onMounted(async () => {
+    window.addEventListener('resize', handleResize);
     try {
         if (!ffmpeg.isLoaded()) {
             await ffmpeg.load(); // 显式加载
@@ -863,9 +1250,97 @@ onMounted(async () => {
         console.error('FFmpeg 加载失败:', error);
         ElMessage.error('FFmpeg 初始化失败，请刷新页面重试');
     }
+    const container = document.querySelector('.video-container');
+    if (container) {
+        observer.observe(container);
+    }
+
 });
+onUnmounted(() => {
+    window.removeEventListener('resize', handleResize);
+    // 清理所有创建的URL对象
+    if (backgroundPreview.value) {
+        URL.revokeObjectURL(backgroundPreview.value);
+    }
+    // 清理水印URL
+    watermarkPreviews.value.forEach(watermark => {
+        if (watermark.preview) {
+            URL.revokeObjectURL(watermark.preview);
+        }
+    });
+    // 清理序列帧URL
+    track.value.forEach(url => URL.revokeObjectURL(url));
+    observer.disconnect();
+});
+const updateAllElementPositions = () => {
+    // 更新文本元素
+    editableFields.value.forEach(field => {
+        if (field.previewElementId) {
+            applyStyleToVideo(field);
+        }
+    });
+
+    // 更新水印元素
+    watermarkPreviews.value.forEach((_, index) => {
+        updateWatermarkElement(index);
+    });
+};
+const debounce = (func, wait) => {
+    let timeout;
+    return function () {
+        const context = this;
+        const args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+            func.apply(context, args);
+        }, wait);
+    };
+};
+const handleResize = debounce(() => {
+    if (isBackgroundApplied.value && video.value) {
+        adjustVideoSize();
+    }
+    updateAllElementPositions();
+}, 200);
+
 const handleVideoLoaded = () => {
     console.log('视频元数据加载完成');
+    if (isBackgroundApplied.value) {
+        adjustVideoSize();
+        const bgImg = document.querySelector('.background-image');
+        if (bgImg) {
+            videoHeight.value = bgImg.clientHeight;
+            // 重新计算所有预览元素的Y位置
+            editableFields.value.forEach(field => {
+                if (field.previewElementId) {
+                    const element = document.getElementById(field.previewElementId);
+                    if (element) {
+                        const bgTop = (document.querySelector('.video-container').clientHeight - bgImg.clientHeight) / 2;
+                        element.style.top = `${bgTop + field.style.yPosition}px`;
+                    }
+                }
+            });
+            // 重新计算所有水印的Y位置
+            watermarkPreviews.value.forEach(watermark => {
+                if (watermark.elementId) {
+                    const element = document.getElementById(watermark.elementId);
+                    if (element) {
+                        const bgTop = (document.querySelector('.video-container').clientHeight - bgImg.clientHeight) / 2;
+                        element.style.top = `${bgTop + watermark.y}px`;
+                    }
+                }
+            });
+        }
+    } else {
+        // 没有背景时保持原始宽高比
+        videoWidth.value = screenVideo.value.videoWidth;
+        videoHeight.value = screenVideo.value.videoHeight;
+        videoAspectRatio.value = `${videoWidth.value}/${videoHeight.value}`;
+    }
+    // 确保Y坐标不超过最大高度
+    editableFields.value.forEach(field => {
+        field.style.yPosition = Math.min(field.style.yPosition, videoHeight.value);
+    });
 };
 
 const handleVideoError = (error) => {
@@ -880,76 +1355,189 @@ const resetVideoState = () => {
 };
 
 const autoGenerateSubtitles = ref(false);
-const handleSubtitleToggle = (value) => {
-    if (value) {
-        ElMessage.info('已开启自动生成字幕');
-        // Add your auto-generation logic here
-    } else {
-        ElMessage.info('已关闭自动生成字幕');
-    }
+
+const fontFiles = {
+    'Arial': '/fonts/arial.ttf',
+    'Times New Roman': '/fonts/times.ttf',
+    'Courier New': '/fonts/courier.ttf',
+    'Georgia': '/fonts/georgia.ttf',
+    'Verdana': '/fonts/verdana.ttf'
 };
+
+async function loadFont(fontName) {
+    try {
+        const fontPath = fontFiles[fontName];
+        if (!fontPath) throw new Error(`字体${fontName}未配置`);
+
+        const response = await fetch(fontPath);
+        if (!response.ok) throw new Error('字体加载失败');
+
+        const fontData = await response.arrayBuffer();
+        ffmpeg.FS('writeFile', `font_${fontName.replace(/\s+/g, '_')}.ttf`, new Uint8Array(fontData));
+        return `font_${fontName.replace(/\s+/g, '_')}.ttf`;
+    } catch (e) {
+        console.error(`字体加载失败: ${e.message}`);
+        return 'default_font.ttf'; // 回退字体
+    }
+}
 //待完善的方法
 const renderVideo = async () => {
+    let command = [];
+    let filterComplex = [];
+    let currentOutput = '[0:v]';
     try {
         ElMessage.info('正在渲染视频...');
+        if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
-        // 准备FFmpeg命令参数
-        const commands = [
-            '-i', 'input.mp4'
-        ];
+        // 1. 准备输入文件
+        const videoData = await fetchFile(video.value);
+        ffmpeg.FS('writeFile', 'input.mp4', videoData);
 
-        // 添加背景图片处理
+        // 2. 构建命令基础
+        command = ['-i', 'input.mp4'];
+        filterComplex = [];
+        currentOutput = '[0:v]'; // 初始视频流
+        let hasBackground = false;
+
+        // 3. 背景处理（修复尺寸问题）
         if (backgroundPreview.value) {
-            commands.push('-i', 'background.jpg');
-            commands.push('-filter_complex',
-                `[1]scale=${customWidth.value}:${customHeight.value}[bg];` +
-                `[0]scale=${customWidth.value}:${customHeight.value}:force_original_aspect_ratio=decrease[fg];` +
-                `[bg][fg]overlay=(W-w)/2:(H-h)/2`);
-        }
+            const bgData = await fetchFile(await (await fetch(backgroundPreview.value)).blob());
+            ffmpeg.FS('writeFile', 'background.png', bgData);
+            command.push('-i', 'background.png');
+            hasBackground = true;
 
-        // 添加水印处理
-        if (watermarkPreview.value) {
-            commands.push('-i', 'watermark.png');
-            commands.push('-filter_complex',
-                `[2]scale=iw*${watermarkSize.value / 100}:-1,format=rgba,colorchannelmixer=aa=${watermarkOpacity.value / 100}[wm];` +
-                `[0][wm]overlay=${watermarkX.value}:${watermarkY.value}`);
-        }
+            // 获取背景实际尺寸
+            const bgImg = await new Promise(resolve => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.src = backgroundPreview.value;
+            });
 
-        // 添加文字处理
-        editableFields.value.forEach(field => {
-            if (field.previewElementId) {
-                commands.push('-vf',
-                    `drawtext=text='${field.value}':x=${field.style.xPosition}:y=${field.style.yPosition}:` +
-                    `fontsize=${field.style.fontSize}:fontcolor=${field.style.fontColor.replace('#', '0x')}@${Math.round(field.style.opacity * 255).toString(16)}:` +
-                    `box=1:boxcolor=${field.style.backgroundColor.replace('#', '0x')}@${Math.round(field.style.opacity * 255).toString(16)}`);
+            // 确定输出尺寸
+            let outputWidth, outputHeight;
+            if (videoSizeOption.value === 'custom') {
+                // 使用用户自定义尺寸
+                outputWidth = parseInt(customWidth.value);
+                outputHeight = parseInt(customHeight.value);
+            } else {
+                // 使用背景图片尺寸（'match' 模式）
+                outputWidth = bgImg.naturalWidth || bgImg.width;
+                outputHeight = bgImg.naturalHeight || bgImg.height;
             }
-        });
 
-        commands.push('-c:v', 'libx264', '-preset', 'fast', 'output.mp4');
+            // 确保尺寸为偶数（编码器要求）
+            const makeEven = num => 2 * Math.round(num / 2);
+            outputWidth = makeEven(outputWidth);
+            outputHeight = makeEven(outputHeight);
 
-        await ffmpeg.run(...commands);
+            filterComplex.push(
+                `[1:v]scale=${outputWidth}:${outputHeight}[bg];` +
+                `[0:v]scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=decrease[fg];` +
+                `[bg][fg]overlay=(W-w)/2:(H-h)/2[outv]`
+            );
+            currentOutput = '[outv]';
+        }
 
-        ElMessage.success('视频渲染完成');
+        // 4. 水印处理（修复连接逻辑）
+        await Promise.all(watermarkPreviews.value.map(async (wm, i) => {
+            const wmData = await fetchFile(await (await fetch(wm.preview)).blob());
+            ffmpeg.FS('writeFile', `wm${i}.png`, wmData);
+            command.push('-i', `wm${i}.png`);
+
+            const wmIndex = i + (hasBackground ? 2 : 1);
+            filterComplex.push(
+                `[${wmIndex}]scale=iw*${wm.size / 100}:-1,` +
+                `format=rgba,colorchannelmixer=aa=${wm.opacity / 100}[wm${i}];` +
+                `${currentOutput}[wm${i}]overlay=${wm.x}:${wm.y}:format=auto[outv]`
+            );
+            currentOutput = '[outv]'; // 确保使用正确的输出标签
+        }));
+
+        // 5. 文字处理（确保使用正确的输出流）
+        const textFields = editableFields.value.filter(f => f.previewElementId && f.value);
+        if (textFields.length > 0) {
+            for (const [index, field] of textFields.entries()) {
+                const fontPath = await loadFont(field.style.fontFamily);
+                const style = field.style;
+
+                filterComplex.push(
+                    `${currentOutput}` +
+                    `drawtext=text='${field.value.replace(/'/g, "'\\\\''")}':` +
+                    `x=${style.xPosition}:y=${style.yPosition}:` +
+                    `fontsize=${style.fontSize}:` +
+                    `fontcolor=${style.fontColor.replace('#', '0x')}:` +
+                    `fontfile=${fontPath}:` +
+                    `box=1:boxcolor=${style.backgroundColor.replace('#', '0x')}` +
+                    `[outv]`
+                );
+                currentOutput = '[outv]';
+            }
+        }
+
+        // 6. 命令组合（确保最终使用[outv]）
+        command.push(
+            '-filter_complex', filterComplex.join(';'),
+            '-map', currentOutput, // 使用最终的输出流
+            '-map', '0:a?',
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            '-movflags', '+faststart',
+            '-profile:v', 'main',
+            '-preset', 'fast',
+            '-crf', '23',
+            '-c:a', 'copy',
+            '-y',
+            'output.mp4'
+        );
+
+        console.log('完整命令:', command.join(' '));
+        await ffmpeg.run(...command);
+
+        // 7. 验证输出
+        const data = ffmpeg.FS('readFile', 'output.mp4');
+        const blob = new Blob([data.buffer], { type: 'video/mp4' });
+        screenVideo.value.src = URL.createObjectURL(blob);
+        video.value = new File([blob], 'rendered.mp4', { type: 'video/mp4' });
+
+        ElMessage.success('渲染成功!');
+        resetAllPreviews();
     } catch (error) {
-        console.error('视频渲染失败:', error);
-        ElMessage.error(`视频渲染失败: ${error.message}`);
+        console.error('完整错误:', {
+            command: command?.join(' '),
+            filterChain: filterComplex,
+            error: error.message,
+            stack: error.stack
+        });
+        ElMessage.error(`渲染失败: ${error.message}`);
     }
 };
-
+// 辅助函数：获取图片尺寸
+function getImageDimensions(url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({
+            width: img.width,
+            height: img.height
+        });
+        img.src = url;
+    });
+}
 const exportVideo = async () => {
     try {
         ElMessage.info('正在导出视频...');
-        // Add your export logic here
-        const data = ffmpeg.FS('readFile', 'output.mp4');
-        const blob = new Blob([data.buffer], { type: 'video/mp4' });
-        const url = URL.createObjectURL(blob);
+        // 创建下载链接
+        const videoSrc = screenVideo.value.src;
         const a = document.createElement('a');
-        a.href = url;
-        a.download = 'exported_video.mp4';
+        a.href = videoSrc;
+        a.download = `exported_video_${Date.now()}.mp4`;
+        document.body.appendChild(a);
         a.click();
-        ElMessage.success('视频导出成功');
+        document.body.removeChild(a);
+
+        ElMessage.success('视频导出成功！');
     } catch (error) {
-        ElMessage.error(`视频导出失败: ${error.message}`);
+        console.error('导出失败:', error);
+        ElMessage.error(`导出失败: ${error.message}`);
     }
 };
 //重置所有编辑
@@ -958,7 +1546,13 @@ const resetAllPreviews = () => {
         if (field.previewElementId) {
             removePreviewElement(field.previewElementId);
         }
+        field.showEditPanel = false;
     });
+    removeBackgroundElement();
+    while (watermarkPreviews.value.length > 0) {
+        removeWatermarkElement(0);
+    }
+    watermarkPreviews.value = [];
 };
 </script>
 
@@ -1000,20 +1594,71 @@ const resetAllPreviews = () => {
     height: 100%;
 }
 
-.video-container {
-    flex: 1;
+.video-container-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: #000;
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #000;
     overflow: hidden;
+}
+
+.background-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 0;
+    overflow: hidden;
+    z-index: 0;
+}
+
+.background-image {
+    height: 100%;
+    width: auto;
+    object-fit: contain;
+}
+
+.video-container {
     position: relative;
+    z-index: 1;
+    width: auto;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.video-upload-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: white;
+    cursor: pointer;
+}
+
+.video-container video {
+    // position: relative;
+    // top: 50%;
+    // transform: translateY(-50%);
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
 }
 
 #screen-video {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    z-index: 1;
 }
 
 .video-upload-placeholder {
@@ -1062,6 +1707,11 @@ const resetAllPreviews = () => {
     width: 100%;
     height: 100%;
     pointer-events: none;
+    z-index: 12;
+}
+
+.preview-element {
+    z-index: 12;
 }
 
 .track-container {
@@ -1281,6 +1931,83 @@ const resetAllPreviews = () => {
     margin-top: 15px;
 }
 
+/* 水印列表样式 */
+.watermark-item {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+.watermark-thumbnail {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.watermark-thumbnail img {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    margin-right: 10px;
+}
+
+.watermark-index {
+    font-size: 14px;
+}
+
+.remove-watermark-btn {
+    margin-left: 10px;
+    padding: 4px 8px;
+    background-color: #f56c6c;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+/* 水印编辑面板 */
+.watermark-options {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.watermark-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.watermark-control {
+    display: flex;
+    align-items: center;
+    min-width: 120px;
+}
+
+.watermark-control label {
+    white-space: nowrap;
+    margin-right: 5px;
+    font-size: 14px;
+}
+
+.watermark-control input[type="range"] {
+    flex: 1;
+    min-width: 80px;
+}
+
+.watermark-control span {
+    min-width: 40px;
+    text-align: right;
+    font-size: 13px;
+    margin-left: 5px;
+}
+
 .preview-btn {
     flex: 1;
     padding: 8px 15px;
@@ -1375,8 +2102,10 @@ const resetAllPreviews = () => {
     width: 100%;
     gap: 15px;
     margin-top: 15px;
+    margin-bottom: 75px;
 }
 
+.reset-btn,
 .render-btn {
     flex: 1;
     padding: 12px 0;
@@ -1503,4 +2232,5 @@ const resetAllPreviews = () => {
     transition: all 0.3s;
     z-index: 10;
     object-fit: contain;
-}</style>
+}
+</style>
